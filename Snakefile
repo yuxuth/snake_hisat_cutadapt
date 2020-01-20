@@ -14,28 +14,25 @@ STARINDEX = config['STARINDEX']
 hisat = config["hisat"]
 stringtie = config['stringtie']
 TARGETS = []
-NGmerge = config['NGmerge'] ## remove the adaptor by the overlap , if the adaptor contaimination happen, use the cutadaptor
+# NGmerge = config['NGmerge'] ## remove the adaptor by the overlap , if the adaptor contaimination happen, use the cutadaptor
 # splicesite_index = config['splicesite_index']
 
 ## constructe the target if the inputs are fastqs
-ALL_TRIMMED_FASTQ_1 = expand("01_trim_seq/{sample}_1.fastq", sample = SAMPLES)
-ALL_TRIMMED_FASTQ_2 = expand("01_trim_seq/{sample}_2.fastq", sample = SAMPLES)
-ALL_FASTQC  = expand("02_fqc/{sample}_1_fastqc.zip", sample = SAMPLES)
+ALL_TRIMMED_FASTQ = expand("01_trim_seq/{sample}_{read}.fastq.gz", sample = SAMPLES, read = ["R1", "R2"])
+ALL_FASTQC  = expand("02_fqc/{sample}_R1_fastqc.zip", sample = SAMPLES)
 ALL_BAM = expand("03_bam/{sample}_Aligned.out.sam", sample = SAMPLES)
 ALL_SORTED_BAM = expand("04_sortBam/{sample}.sorted.bam", sample = SAMPLES)
 ALL_stringtie_gtf = expand("05_stringtie/{sample}/{sample}.stringtie.gtf", sample = SAMPLES)
-ALL_bw = expand("06_bigwig/{sample}.bw", sample = SAMPLES)
+# ALL_bw = expand("06_bigwig/{sample}.bw", sample = SAMPLES)
 ALL_QC = ["07_multiQC/multiQC_log.html"]
-ball_grown = ['ballgown_gene_table.tsv']
-TARGETS.extend(ALL_TRIMMED_FASTQ_1) 
-TARGETS.extend(ALL_TRIMMED_FASTQ_2) 
+# ball_grown = ['ballgown_gene_table.tsv']
+TARGETS.extend(ALL_TRIMMED_FASTQ) 
 TARGETS.extend(ALL_BAM) ##append all list to 
 TARGETS.extend(ALL_SORTED_BAM)
-TARGETS.extend(ALL_stringtie_gtf)
+# TARGETS.extend(ALL_stringtie_gtf)
 TARGETS.extend(ALL_FASTQC) ## check later
 TARGETS.extend(ALL_QC)
-TARGETS.extend(ball_grown)
-TARGETS.extend(ALL_bw)
+
 
 
 localrules: all
@@ -51,37 +48,34 @@ rule trim_fastqs: ## merge fastq
 		r1 = lambda wildcards: FILES[wildcards.sample]['R1'],
 		r2 = lambda wildcards: FILES[wildcards.sample]['R2']
 	output:
-		("01_trim_seq/{sample}_1.fastq" ), ("01_trim_seq/{sample}_2.fastq")
+		("01_trim_seq/{sample}_R1.fastq.gz" ), ("01_trim_seq/{sample}_R2.fastq.gz")
 	log: "00_log/{sample}_trim_adapter.log"
-	params:
-		jobname = "{sample}"
-	threads : 8
+	threads : 6
 	# group: "mygroup"
 	message: "trim fastqs {input}: {threads} threads"
 	shell:
 		"""
-		NGmerge  -a -y  -n {threads} -1 {input[0]} -2 {input[1]}  -o 01_trim_seq/{params.jobname} 2> {log} 
-		"""
+		cutadapt -e 0.12 -a CTGTCTCTTATACACATCT -A CTGTCTCTTATACACATCT -j 6 \
+        -o {output[0]} -p {output[1]} \
+        {input.r1} {input.r2} > {log}
+        """
 
 rule fastqc:
-	input:  "01_trim_seq/{sample}_1.fastq" , "01_trim_seq/{sample}_2.fastq"
-	output: "02_fqc/{sample}_1_fastqc.zip" 
-	log:    "00_log/{sample}_fastqc"
+	input:  ("01_trim_seq/{sample}_R1.fastq.gz" ), ("01_trim_seq/{sample}_R2.fastq.gz")
+	output: "02_fqc/{sample}_R1_fastqc.zip" 
 	# group: "mygroup"
 	params : jobname = "{sample}"
 	message: "fastqc {input}: {threads}"
 	shell:
 	    """
 	    module load fastqc
-	    fastqc -o 02_fqc -f fastq --noextract {input}  2> {log}
+	    fastqc -o 02_fqc -f fastq --noextract {input} 
 	    """
-
 
 
 rule hisat_mapping:
 	input: 
-		"01_trim_seq/{sample}_1.fastq", 
-		"01_trim_seq/{sample}_2.fastq"
+		("01_trim_seq/{sample}_R1.fastq.gz" ), ("01_trim_seq/{sample}_R2.fastq.gz")
 	output: temp("03_bam/{sample}_Aligned.out.sam")
 	log: "00_log/{sample}_hisat_align"
 	params: 
@@ -169,12 +163,11 @@ rule make_bigwigs: ## included if need the coverage depth
 	# bamCoverage -b {input[0]}  --skipNonCoveredRegions --normalizeUsing RPKM --samFlagExclude 16  -p {threads}  -o {output[0]} 2> {log}
 	# bamCoverage -b {input[0]}  --skipNonCoveredRegions --normalizeUsing RPKM --samFlagInclude 16  -p {threads}  -o {output[1]} 2>> {log}
 
-
 rule multiQC:
     input :
         expand("00_log/{sample}_hisat_align", sample = SAMPLES),
         # expand("04aln/{sample}.sorted.bam.flagstat", sample = ALL_SAMPLES),
-        expand("02_fqc/{sample}_1_fastqc.zip", sample = SAMPLES)
+        expand("02_fqc/{sample}_R1_fastqc.zip", sample = SAMPLES)
     output: "07_multiQC/multiQC_log.html"
     log: "00_log/multiqc.log"
     message: "multiqc for all logs"
