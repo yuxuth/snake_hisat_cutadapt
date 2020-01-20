@@ -61,16 +61,17 @@ rule trim_fastqs: ## merge fastq
         """
 
 rule fastqc:
-	input:  ("01_trim_seq/{sample}_R1.fastq.gz" ), ("01_trim_seq/{sample}_R2.fastq.gz")
-	output: "02_fqc/{sample}_R1_fastqc.zip" 
-	# group: "mygroup"
-	params : jobname = "{sample}"
-	message: "fastqc {input}: {threads}"
-	shell:
-	    """
-	    module load fastqc
-	    fastqc -o 02_fqc -f fastq --noextract {input} 
-	    """
+    input:  ("01_trim_seq/{sample}_R1.fastq.gz" ), ("01_trim_seq/{sample}_R2.fastq.gz")
+    output: "02_fqc/{sample}_R1_fastqc.zip" 
+    # group: "mygroup"
+    log:"00_log/{sample}_fastqc"
+    params : jobname = "{sample}"
+    message: "fastqc {input}: {threads}"
+    shell:
+        """
+        module load fastqc
+        fastqc -o 02_fqc -f fastq --noextract {input}  2> {log}
+        """
 
 
 rule hisat_mapping:
