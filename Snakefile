@@ -55,7 +55,7 @@ rule trim_fastqs: ## merge fastq
 	message: "trim fastqs {input}: {threads} threads"
 	shell:
 		"""
-		cutadapt -e 0.12 -a CTGTCTCTTATACACATCT -A CTGTCTCTTATACACATCT -j 6 \
+		cutadapt -e 0.12 -a CTGTCTCTTATACACATCT -A CTGTCTCTTATACACATCT -j 6 -m 30 \
         -o {output[0]} -p {output[1]} \
         {input.r1} {input.r2} > {log}
         """
